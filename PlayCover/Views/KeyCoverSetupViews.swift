@@ -72,29 +72,29 @@ struct KeyCoverInitialSetupView: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("button.OK") {
-                    Task {
-                        if keyCoverPassword == "" {
-                            keyCoverPasswordError = true
-                            return
+                    if keyCoverPassword == "" {
+                        keyCoverPasswordError = true
+                        return
+                    }
+                    if keyCoverPassword != keyCoverPasswordConfirmed {
+                        keyCoverConfirmError = true
+                        return
+                    }
+                    Task(priority: .userInitiated) {
+                        isEncrypting = true
+                        switch keyOption {
+                        case .userProvidedPassword:
+                            KeyCoverPreferences.shared.keyCoverEnabled = .userProvidedPassword
+                        case .selfGeneratedPassword:
+                            KeyCoverPreferences.shared.keyCoverEnabled = .selfGeneratedPassword
+                        case .disabled:
+                            break
                         }
-                        if keyCoverPassword != keyCoverPasswordConfirmed {
-                            keyCoverConfirmError = true
-                            return
-                        }
-                        Task(priority: .userInitiated) {
-                            isEncrypting = true
-                            switch keyOption {
-                            case .userProvidedPassword:
-                                KeyCoverPreferences.shared.keyCoverEnabled = .userProvidedPassword
-                            case .selfGeneratedPassword:
-                                KeyCoverPreferences.shared.keyCoverEnabled = .selfGeneratedPassword
-                            case .disabled:
-                                break
-                            }
+                        await Task.detached {
                             KeyCoverPassword.shared.setKeyCoverPassword(keyCoverPassword)
-                            isEncrypting = false
-                            isPresented = false
-                        }
+                        }.value
+                        isEncrypting = false
+                        isPresented = false
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -182,35 +182,33 @@ struct KeyCoverUpdatePasswordView: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("button.OK") {
-                    Task {
-                        if !KeyCoverPassword.shared.validatePassword(oldKeyCoverPassword) {
-                            oldKeyCoverPasswordError = true
-                            return
+                    if !KeyCoverPassword.shared.validatePassword(oldKeyCoverPassword) {
+                        oldKeyCoverPasswordError = true
+                        return
+                    }
+                    if keyCoverPassword == "" {
+                        keyCoverPasswordError = true
+                        return
+                    }
+                    if keyCoverPassword != keyCoverPasswordConfirm {
+                        keyCoverPasswordConfirmError = true
+                        return
+                    }
+                    Task(priority: .userInitiated) {
+                        isWorking = true
+                        switch keyOption {
+                        case .userProvidedPassword:
+                            KeyCoverPreferences.shared.keyCoverEnabled = .userProvidedPassword
+                        case .selfGeneratedPassword:
+                            KeyCoverPreferences.shared.keyCoverEnabled = .selfGeneratedPassword
+                        case .disabled:
+                            break
                         }
-                        if keyCoverPassword == "" {
-                            keyCoverPasswordError = true
-                            return
-                        }
-                        if keyCoverPassword != keyCoverPasswordConfirm {
-                            keyCoverPasswordConfirmError = true
-                            return
-                        }
-                        Task(priority: .userInitiated) {
-                            switch keyOption {
-                            case .userProvidedPassword:
-                                KeyCoverPreferences.shared.keyCoverEnabled = .userProvidedPassword
-                            case .selfGeneratedPassword:
-                                KeyCoverPreferences.shared.keyCoverEnabled = .selfGeneratedPassword
-                            case .disabled:
-                                break
-                            }
-                            isWorking = true
-                            Task(priority: .userInitiated) {
-                                KeyCoverPassword.shared.setKeyCoverPassword(keyCoverPassword)
-                            }
-                            isWorking = false
-                            isPresented = false
-                        }
+                        await Task.detached {
+                            KeyCoverPassword.shared.setKeyCoverPassword(keyCoverPassword)
+                        }.value
+                        isWorking = false
+                        isPresented = false
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -256,17 +254,17 @@ struct KeyCoverRemovalView: View {
                 }
                 .keyboardShortcut(.cancelAction)
                 Button("button.OK") {
-                    Task {
-                        if !KeyCoverPassword.shared.validatePassword(keyCoverPassword) {
-                            keyCoverPasswordError = true
-                            return
-                        }
-                        Task(priority: .userInitiated) {
-                            isWorking = true
+                    if !KeyCoverPassword.shared.validatePassword(keyCoverPassword) {
+                        keyCoverPasswordError = true
+                        return
+                    }
+                    Task(priority: .userInitiated) {
+                        isWorking = true
+                        await Task.detached {
                             KeyCoverPassword.shared.removeKeyCoverPassword()
-                            isWorking = false
-                            isPresented = false
-                        }
+                        }.value
+                        isWorking = false
+                        isPresented = false
                     }
                 }
                 .keyboardShortcut(.defaultAction)

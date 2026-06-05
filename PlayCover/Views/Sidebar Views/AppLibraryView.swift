@@ -169,6 +169,7 @@ struct AppLibraryView: View {
         })
     }
 
+    @MainActor
     private func installApp(_ url: URL) {
         Installer.install(ipaUrl: url, export: false, returnCompletion: { _ in
             Task { @MainActor in

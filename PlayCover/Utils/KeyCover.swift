@@ -14,15 +14,11 @@ struct KeyCover {
     static var shared = KeyCover()
     static var playChainPath: URL {
         let playChainDir = PlayTools.playCoverContainer.appendingPathComponent("PlayChain")
-
-        if !FileManager.default.fileExists(atPath: playChainDir.path) {
-            do {
-                try FileManager.default.createDirectory(at: playChainDir, withIntermediateDirectories: true)
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.createDirectory(at: playChainDir, withIntermediateDirectories: true)
+        } catch {
+            Log.shared.error(error)
         }
-
         return playChainDir
     }
 
@@ -90,6 +86,7 @@ struct KeyCover {
     }
 }
 
+@MainActor
 class KeyCoverObservable: ObservableObject {
     static var shared = KeyCoverObservable()
 
@@ -130,18 +127,29 @@ struct KeyCoverKey {
 
     func encryptKeyDB() throws {
         if let plainTextKey = KeyCover.shared.keyCoverPlainTextKey {
-            // encrypt the db file
+            guard FileManager.default.fileExists(atPath: "/usr/bin/openssl") else {
+                throw ShellError(output: "openssl not found at /usr/bin/openssl")
+            }
             let task = Process()
-            task.launchPath = "/usr/bin/openssl"
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
             task.currentDirectoryPath = KeyCover.playChainPath.path
             task.arguments = ["enc", "-aes-256-cbc", "-A",
                                 "-in", decryptedKeyDB.path,
                                 "-out", encryptedKeyDB.path,
-                                "-k", plainTextKey]
-            task.launch()
+                                "-pass", "stdin"]
+            let pipe = Pipe()
+            task.standardInput = pipe
+            try task.run()
+            if let keyData = plainTextKey.data(using: .utf8) {
+                pipe.fileHandleForWriting.write(keyData)
+            }
+            try? pipe.fileHandleForWriting.close()
             task.waitUntilExit()
 
-            // delete the key dbs
+            guard task.terminationStatus == 0 else {
+                throw ShellError(output: "openssl encryption failed with status \(task.terminationStatus)")
+            }
+
             try deleteKeyDB()
 
             Task { @MainActor in
@@ -152,15 +160,27 @@ struct KeyCoverKey {
 
     func decryptKeyDB() throws {
         if let plainTextKey = KeyCover.shared.keyCoverPlainTextKey {
-            // decrypt the zip file
+            guard FileManager.default.fileExists(atPath: "/usr/bin/openssl") else {
+                throw ShellError(output: "openssl not found at /usr/bin/openssl")
+            }
             let task = Process()
-            task.launchPath = "/usr/bin/openssl"
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
             task.arguments = ["enc", "-aes-256-cbc", "-A", "-d", "-in", encryptedKeyDB.path, "-out",
                               decryptedKeyDB.path,
-                              "-k", plainTextKey]
-            task.launch()
+                              "-pass", "stdin"]
+            let pipe = Pipe()
+            task.standardInput = pipe
+            try task.run()
+            if let keyData = plainTextKey.data(using: .utf8) {
+                pipe.fileHandleForWriting.write(keyData)
+            }
+            try? pipe.fileHandleForWriting.close()
             task.waitUntilExit()
-            // delete the encrypted key file
+
+            guard task.terminationStatus == 0 else {
+                throw ShellError(output: "openssl decryption failed with status \(task.terminationStatus)")
+            }
+
             try FileManager.default.removeItem(at: encryptedKeyDB)
 
             Task { @MainActor in
@@ -184,12 +204,15 @@ class KeyCoverPassword {
     let tag = "io.playcover.masterkey"
 
     func setKeyCoverPassword(_ key: String) {
-        // swiftlint: disable force_unwrapping
+        guard let keyData = key.data(using: .utf8) else {
+            Log.shared.error("Failed to encode KeyCover password to UTF-8")
+            return
+        }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                     kSecAttrService as String: tag,
                                     kSecAttrAccount as String: tag,
-                                    kSecValueData as String: key.data(using: .utf8)!]
-        // swiftlint: enable force_unwrapping
+                                    kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                                    kSecValueData as String: keyData]
         // thank you apple very cool
         // Get the key
         let oldKey = getKeyCoverPassword()
@@ -208,7 +231,7 @@ class KeyCoverPassword {
         Task(priority: .userInitiated) {
             let status = SecItemAdd(query as CFDictionary, nil)
             if status != errSecSuccess {
-                print("Error storing master key in keychain: \(status)")
+                Log.shared.error("Error storing master key in keychain (status: \(status))")
             }
         }
 
@@ -256,7 +279,7 @@ class KeyCoverPassword {
         Task(priority: .userInitiated) {
             let status = SecItemDelete(query as CFDictionary)
             if status != errSecSuccess {
-                print("Error removing master key from keychain: \(status)")
+                Log.shared.error("Error removing master key from keychain (status: \(status))")
             }
         }
 
@@ -280,7 +303,7 @@ class KeyCoverPassword {
 
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess {
-            print("Error removing master key from keychain: \(status)")
+            Log.shared.error("Error removing master key from keychain (status: \(status))")
         }
 
         KeyCoverPreferences.shared.keyCoverEnabled = .disabled
@@ -297,7 +320,18 @@ class KeyCoverPassword {
     }
 
     func validatePassword(_ key: String) -> Bool {
-        return key == getKeyCoverPassword()
+        guard let stored = getKeyCoverPassword() else { return false }
+        // Constant-time comparison to prevent timing attacks
+        guard let keyData = key.data(using: .utf8),
+              let storedData = stored.data(using: .utf8),
+              keyData.count == storedData.count else {
+            return false
+        }
+        var result: UInt8 = 0
+        for (a, b) in zip(keyData, storedData) {
+            result |= a ^ b
+        }
+        return result == 0
     }
 
     func generateVerySecurePassword() -> String {

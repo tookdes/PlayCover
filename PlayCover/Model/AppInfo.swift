@@ -55,8 +55,10 @@ public class AppInfo {
     }
 
     public func retargeted(toURL url: URL) -> AppInfo {
-        guard let copy = rawStorage.mutableCopy() as? NSMutableDictionary
-        else { fatalError("Failed to copy rawStorage") }
+        guard let copy = rawStorage.mutableCopy() as? NSMutableDictionary else {
+            Log.shared.error("Failed to copy rawStorage")
+            return AppInfo(url: url, rawStorage: NSMutableDictionary())
+        }
         return AppInfo(url: url, rawStorage: copy)
     }
 
@@ -210,26 +212,26 @@ public class AppInfo {
 
     var primaryIconName: String {
         if let bundleIconDict = self[dictionary: "CFBundleIcons~ipad"] {
-            if let primaryBundleIconDict: [String: Any] = bundleIconDict["CFBundlePrimaryIcon"] as? [String: Any] {
-                if let bundleIconFiles = primaryBundleIconDict["CFBundleIconFiles"] as? [String] {
-                    let primaryIconName = bundleIconFiles[bundleIconFiles.count - 1]
-                    return primaryIconName
+            if let primaryBundleIconDict = bundleIconDict["CFBundlePrimaryIcon"] as? [String: Any] {
+                if let bundleIconFiles = primaryBundleIconDict["CFBundleIconFiles"] as? [String],
+                   let lastIcon = bundleIconFiles.last {
+                    return lastIcon
                 }
             }
         }
 
         if let bundleIconDict = self[dictionary: "CFBundleIcons"] {
-            if let primaryBundleIconDict: [String: Any] = bundleIconDict["CFBundlePrimaryIcon"] as? [String: Any] {
-                if let bundleIconFiles = primaryBundleIconDict["CFBundleIconFiles"] as? [String] {
-                    let primaryIconName = bundleIconFiles[bundleIconFiles.count - 1]
-                    return primaryIconName
+            if let primaryBundleIconDict = bundleIconDict["CFBundlePrimaryIcon"] as? [String: Any] {
+                if let bundleIconFiles = primaryBundleIconDict["CFBundleIconFiles"] as? [String],
+                   let lastIcon = bundleIconFiles.last {
+                    return lastIcon
                 }
             }
         }
 
-        if let bundleIconFiles = self[strings: "CFBundleIconFiles"] {
-            let primaryIconName = bundleIconFiles[bundleIconFiles.count - 1]
-            return primaryIconName
+        if let bundleIconFiles = self[strings: "CFBundleIconFiles"],
+           let lastIcon = bundleIconFiles.last {
+            return lastIcon
         }
 
         return "AppIcon"
@@ -248,14 +250,14 @@ public class AppInfo {
                 self[dictionary: "LSEnvironment"] = NSMutableDictionary(dictionary: [String: String]())
             }
 
-            if let key = newValue.first?.key, let value = newValue.first?.value {
+            for (key, value) in newValue {
                 self[dictionary: "LSEnvironment"]?[key] = value
+            }
 
-                do {
-                    try write()
-                } catch {
-                    Log.shared.error(error)
-                }
+            do {
+                try write()
+            } catch {
+                Log.shared.error(error)
             }
         }
     }

@@ -48,7 +48,7 @@ class NetworkVM {
 
     static func ipv6Reachability() -> SCNetworkReachability? {
         var zeroAddress = sockaddr_in6()
-        zeroAddress.sin6_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        zeroAddress.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
         zeroAddress.sin6_family = sa_family_t(AF_INET6)
 
         return withUnsafePointer(to: &zeroAddress, {
@@ -99,7 +99,7 @@ class NetworkVM {
         }.resume()
 
         if completion == nil {
-            semaphore.wait()
+            _ = semaphore.wait(timeout: .now() + 30)
         }
 
         return (finalURL, available)

@@ -21,6 +21,7 @@ enum URLAction: Int, Equatable {
     case open
 }
 
+@MainActor
 class URLObservable: ObservableObject {
     @Published var url: String?
     @Published var type: URLTypes?
@@ -32,7 +33,14 @@ class URLObservable: ObservableObject {
 struct URLHandler {
     public static var shared = URLHandler()
 
+    @MainActor
     func processURL(url: URL) {
+        // Validate URL scheme to prevent processing unexpected schemes
+        guard url.scheme == "playcover" || url.scheme == "playcoverapp" else {
+            NSLog("Rejected URL with unexpected scheme: \(url.scheme ?? "nil")")
+            return
+        }
+
         guard let urlComponenents = NSURLComponents(url: url, resolvingAgainstBaseURL: false),
               let uriHost = urlComponenents.host,
               let params = urlComponenents.queryItems else {
@@ -75,20 +83,20 @@ struct URLHandler {
             URLObservable.shared.type = .source
             switch actionParam {
             case "add":
-                // Add source
-                if let url = params[1].value {
+                // Add source - validate URL is HTTPS
+                if let url = params[1].value, URL(string: url)?.scheme == "https" {
                     URLObservable.shared.url = url
                     URLObservable.shared.action = .add
                 }
             case "remove":
-                // Remove source
-                if let url = params[1].value {
+                // Remove source - validate URL is HTTPS
+                if let url = params[1].value, URL(string: url)?.scheme == "https" {
                     URLObservable.shared.url = url
                     URLObservable.shared.action = .remove
                 }
             case "update":
-                // Update source
-                if let url = params[1].value {
+                // Update source - validate URL is HTTPS
+                if let url = params[1].value, URL(string: url)?.scheme == "https" {
                     URLObservable.shared.url = url
                     URLObservable.shared.action = .update
                 }

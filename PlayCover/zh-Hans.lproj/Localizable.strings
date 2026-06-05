@@ -342,6 +342,11 @@
 "button.Enable" = "启用";
 "button.Reset" = "重置";
 "button.Unlock" = "解锁";
+"button.Delete" = "删除";
+
+"alert.malicious.title" = "检测到恶意应用";
+"alert.malicious.text" = "此应用已被识别为潜在恶意应用，可能会危害您的系统。是否要删除它？";
+
 "settings.toggle.rootWorkDir" = "在 root 目录启动应用程序";
 "settings.toggle.rootWorkDir.help" = "将应用程序的工作目录改为/，就像在iOS上一样。如果应用程序运行不正常，请关闭此功能";
 "keycover.confirmMasterPassword" = "确认主密码";

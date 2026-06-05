@@ -9,6 +9,7 @@ import Foundation
 
 class Installer {
 
+    @MainActor
     static func installPlayToolsPopup() -> Bool {
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("alert.install.injectPlayToolsQuestion", comment: "")
@@ -45,6 +46,7 @@ class Installer {
     }
 
     // swiftlint:disable:next function_body_length
+    @MainActor
     static func install(ipaUrl: URL, export: Bool, returnCompletion: @escaping (URL?) -> Void) {
         // If (the option key is held or the install playtools popup settings is true) and its not an export,
         //    then show the installer dialog
@@ -125,13 +127,17 @@ class Installer {
                 ipa.releaseTempDir()
                 try ipa.removeQuarantine(finalURL)
                 InstallVM.shared.next(.finish, 0.95, 1.0)
-                returnCompletion(finalURL)
+                await MainActor.run {
+                    returnCompletion(finalURL)
+                }
             } catch {
                 Log.shared.error(returnErrorString(error: error))
                 ipa.releaseTempDir()
 
                 InstallVM.shared.next(.failed, 0.95, 1.0)
-                returnCompletion(nil)
+                await MainActor.run {
+                    returnCompletion(nil)
+                }
             }
         }
     }

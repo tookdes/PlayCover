@@ -40,18 +40,28 @@ class Cacher {
 
     func resolveLocalIcon(_ app: PlayApp) -> NSImage? {
         var bestResImage: NSImage?
+        let lock = NSLock()
         let compareStr = app.info.bundleIdentifier + app.info.bundleVersion
 
         app.url.enumerateContents(blocking: false) { file, _ in
-            if file.lastPathComponent.contains(app.info.primaryIconName), let icon = NSImage(contentsOf: file),
-               self.checkImageDimensions(icon, bestResImage) {
-                bestResImage = icon
+            if file.lastPathComponent.contains(app.info.primaryIconName), let icon = NSImage(contentsOf: file) {
+                lock.lock()
+                let shouldReplace = self.checkImageDimensions(icon, bestResImage)
+                if shouldReplace {
+                    bestResImage = icon
+                }
+                lock.unlock()
             }
         }
 
         if let assetsExtractor = try? AssetsExtractor(appUrl: app.url) {
-            for icon in assetsExtractor.extractIcons() where checkImageDimensions(icon, bestResImage) {
-                bestResImage = icon
+            for icon in assetsExtractor.extractIcons() {
+                lock.lock()
+                let shouldReplace = checkImageDimensions(icon, bestResImage)
+                if shouldReplace {
+                    bestResImage = icon
+                }
+                lock.unlock()
             }
         }
         cache.write(string: compareStr, forKey: compareStr)

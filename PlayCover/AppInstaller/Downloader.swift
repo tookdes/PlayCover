@@ -79,9 +79,12 @@ class DownloadApp {
                         if url.isFileURL {
                             proceedInstall(url, deleteIPA: false)
                         } else {
-                            let (finalURL, urlIsValid) = NetworkVM.urlAccessible(url: url, popup: true)
-                            if urlIsValid, let newWrappedURL = finalURL {
-                                proceedDownload(newWrappedURL)
+                            NetworkVM.urlAccessible(url: url, popup: true) { finalURL, urlIsValid in
+                                Task { @MainActor in
+                                    if urlIsValid, let newWrappedURL = finalURL {
+                                        self.proceedDownload(newWrappedURL)
+                                    }
+                                }
                             }
                         }
                     }
@@ -90,6 +93,7 @@ class DownloadApp {
         }
     }
 
+    @MainActor
     func cancel() {
         downloader.cancelAllDownloads()
 
@@ -112,21 +116,23 @@ class DownloadApp {
                 downloader.addDownload(url: finalURL,
                                        destinationURL: tmpDir,
                                        onProgress: { progress in
-                    // progress is a Float
-                    self.downloadVM.progress = Double(progress)
-                }, onCompletion: { error, fileURL in
-                    self.downloadVM.next(.integrity, 0.7, 0.95)
-
-                    if let error = error {
-                        self.downloadVM.next(.failed, 0.95, 1.0)
-                        self.downloadVM.storeAppData = nil
-                        return Log.shared.error(error)
+                    Task { @MainActor in
+                        self.downloadVM.progress = Double(progress)
                     }
+                }, onCompletion: { error, fileURL in
+                    Task { @MainActor in
+                        self.downloadVM.next(.integrity, 0.7, 0.95)
 
-                    self.verifyChecksum(checksum: self.downloadVM.storeAppData?.checksum, file: fileURL) { completing in
-                        self.downloadVM.next(completing ? .finish : .failed, 0.95, 1.0)
-                        if completing {
-                            Task { @MainActor in
+                        if let error = error {
+                            self.downloadVM.next(.failed, 0.95, 1.0)
+                            self.downloadVM.storeAppData = nil
+                            return Log.shared.error(error)
+                        }
+
+                        self.verifyChecksum(checksum: self.downloadVM.storeAppData?.checksum,
+                                            file: fileURL) { completing in
+                            self.downloadVM.next(completing ? .finish : .failed, 0.95, 1.0)
+                            if completing {
                                 self.proceedInstall(fileURL)
                             }
                         }
@@ -172,6 +178,7 @@ class DownloadApp {
         }
     }
 
+    @MainActor
     private func proceedInstall(_ url: URL?, deleteIPA: Bool = true) {
         if let url = url {
             Installer.install(ipaUrl: url, export: false, returnCompletion: { _ in

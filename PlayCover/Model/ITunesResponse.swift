@@ -65,16 +65,20 @@ func getITunesData(_ itunesLookup: String) async -> ITunesResponse? {
     }
 
     return await withCheckedContinuation { continuation in
-        URLSession.shared.dataTask(with: URLRequest(url: url)) { data, _, error in
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        URLSession.shared.dataTask(with: request) { data, response, error in
             do {
-                if error == nil, let data = data {
+                if error == nil, let data = data,
+                   let httpResponse = response as? HTTPURLResponse,
+                   httpResponse.statusCode == 200 {
                     let decoder = JSONDecoder()
                     let jsonResult: ITunesResponse = try decoder.decode(ITunesResponse.self, from: data)
                     continuation.resume(returning: jsonResult.resultCount > 0 ? jsonResult : nil)
                     return
                 }
             } catch {
-                print("Error getting iTunes data from URL: \(itunesLookup): \(error)")
+                print("Error getting iTunes data")
             }
 
             continuation.resume(returning: nil)

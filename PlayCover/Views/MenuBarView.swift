@@ -76,7 +76,7 @@ struct PlayCoverViewMenuView: Commands {
                         // remove await for Swift 6 (no async operation occurs)
                         await NSOpenPanel.selectIPA { result in
                             if case .success(let url) = result {
-                                Task {
+                                Task { @MainActor in
                                     Installer.install(ipaUrl: url,
                                                             export: true,
                                                             returnCompletion: { ipa in

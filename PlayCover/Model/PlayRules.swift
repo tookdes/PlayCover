@@ -15,7 +15,18 @@ struct PlayRules: Decodable {
 
     public static func buildRules(rules: [String], bundleID: String) -> [String] {
         var result: [String] = []
-        let template = RuleTemplate(data: ["NSUserName": "\(NSUserName())", "BundleID": bundleID])
+        // Sanitize bundleID to prevent SBPL injection
+        let sanitizedBundleID = bundleID.replacingOccurrences(
+            of: "[^a-zA-Z0-9.\\-_]",
+            with: "",
+            options: .regularExpression
+        )
+        let sanitizedUserName = NSUserName().replacingOccurrences(
+            of: "[^a-zA-Z0-9.\\-_]",
+            with: "",
+            options: .regularExpression
+        )
+        let template = RuleTemplate(data: ["NSUserName": sanitizedUserName, "BundleID": sanitizedBundleID])
         for rule in rules {
             result.append(template.render(template: rule))
         }

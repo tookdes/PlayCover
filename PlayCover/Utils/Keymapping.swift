@@ -11,14 +11,12 @@ import UniformTypeIdentifiers
 class Keymapping {
     static var keymappingDir: URL {
         let keymappingFolder = PlayTools.playCoverContainer.appendingPathComponent("Keymapping")
-        if !FileManager.default.fileExists(atPath: keymappingFolder.path) {
-            do {
-                try FileManager.default.createDirectory(at: keymappingFolder,
-                                                        withIntermediateDirectories: true,
-                                                        attributes: [:])
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.createDirectory(at: keymappingFolder,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: [:])
+        } catch {
+            Log.shared.error(error)
         }
         return keymappingFolder
     }
@@ -56,13 +54,11 @@ class Keymapping {
         self.baseKeymapURL = Keymapping.keymappingDir.appendingPathComponent(info.bundleIdentifier)
         self.configURL = baseKeymapURL.appendingPathComponent(".config").appendingPathExtension("plist")
 
-        if !FileManager.default.fileExists(atPath: self.baseKeymapURL.path) {
-            do {
-                try FileManager.default.createDirectory(at: self.baseKeymapURL,
-                                                        withIntermediateDirectories: true)
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.createDirectory(at: self.baseKeymapURL,
+                                                    withIntermediateDirectories: true)
+        } catch {
+            Log.shared.error(error)
         }
 
         self.encoder = PropertyListEncoder()
@@ -108,7 +104,10 @@ class Keymapping {
         }
 
         setKeymap(name: "default", map: Keymap(bundleIdentifier: info.bundleIdentifier))
-        reloadKeymapCache()
+        // Verify the keymap was created to prevent infinite recursion
+        if FileManager.default.fileExists(atPath: constructKeymapPath(name: "default").path) {
+            reloadKeymapCache()
+        }
     }
 
     public func getKeymap(name: String) -> Keymap {
@@ -281,6 +280,7 @@ class Keymapping {
         }
     }
 
+    @MainActor
     private func differentBundleIdKeymapAlert() -> Bool {
         let alert = NSAlert()
         alert.messageText = NSLocalizedString("alert.differentBundleIdKeymap.message", comment: "")

@@ -30,16 +30,13 @@ class PlayTools {
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
             .appendingPathComponent("io.playcover.PlayCover")
-        if !FileManager.default.fileExists(atPath: playCoverPath.path) {
-            do {
-                try FileManager.default.createDirectory(at: playCoverPath,
-                                                        withIntermediateDirectories: true,
-                                                        attributes: [:])
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.createDirectory(at: playCoverPath,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: [:])
+        } catch {
+            Log.shared.error(error)
         }
-
         return playCoverPath
     }
 

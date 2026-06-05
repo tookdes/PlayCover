@@ -74,6 +74,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct PlayCoverApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject var updaterViewModel = UpdaterViewModel()
+    @StateObject var appIntegrity = AppIntegrity()
     var storeVM = StoreVM.shared
 
     @State var isSigningSetupShown = false
@@ -85,14 +86,14 @@ struct PlayCoverApp: App {
                 .environmentObject(DownloadVM.shared)
                 .environmentObject(AppsVM.shared)
                 .environmentObject(storeVM)
-                .environmentObject(AppIntegrity())
+                .environmentObject(appIntegrity)
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
                     SoundDeviceService.shared.prepareSoundDevice()
                     NotifyService.shared.allowNotify()
                 }
         }
-        .handlesExternalEvents(matching: ["{same path of URL?}"]) // create new window if doesn't exist
+        .handlesExternalEvents(matching: ["playcover", "playcoverapp"]) // create new window if doesn't exist
         .commands {
             SidebarCommands()
             PlayCoverMenuView(isSigningSetupShown: $isSigningSetupShown)

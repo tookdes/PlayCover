@@ -19,6 +19,15 @@ class Log: ObservableObject {
         }
     }
 
+    func error(_ str: String) {
+        Task { @MainActor in
+            self.dialog(
+                question: NSLocalizedString("alert.error", comment: ""),
+                text: str,
+                style: NSAlert.Style.critical)
+        }
+    }
+
     func error(localized str: String, args: [String] = []) {
         error(String(format: NSLocalizedString(str, comment: ""), arguments: args))
     }
@@ -33,15 +42,18 @@ class Log: ObservableObject {
         }
     }
 
-    var logdata = "\(ProcessInfo.processInfo.operatingSystemVersionString)\n"
+    private let logQueue = DispatchQueue(label: "io.playcover.log")
+    private(set) var logdata = "\(ProcessInfo.processInfo.operatingSystemVersionString)\n"
 
     func log(_ str: String, isError: Bool = false) {
         print(str)
-        if isError {
-            logdata.append("ERROR: ")
+        logQueue.sync {
+            if isError {
+                logdata.append("ERROR: ")
+            }
+            logdata.append(str)
+            logdata.append("\n")
         }
-        logdata.append(str)
-        logdata.append("\n")
     }
 
     private func dialog(question: String, text: String, style: NSAlert.Style) {

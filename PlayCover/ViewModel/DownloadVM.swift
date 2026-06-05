@@ -15,6 +15,7 @@ enum DownloadStepsNative: String {
          canceled = "playapp.progress.canceled"
 }
 
+@MainActor
 class DownloadVM: ProgressVM<DownloadStepsNative> {
     @Published var storeAppData: SourceAppsData?
 

@@ -40,7 +40,7 @@ class Macho {
     }
 
     static func convertMacho(_ macho: URL) throws {
-        print("Converting MachO at \(macho.path)")
+        print("Converting MachO at \(macho.lastPathComponent)")
 
         var binary = try Data(contentsOf: macho)
 
@@ -207,8 +207,10 @@ class Macho {
         binary.replaceSubrange(oldCommandStart..<injectionEnd, with: resultingCommandsData)
 
         // Write new header data
-        header.sizeofcmds -= oldCommandSize
-        header.sizeofcmds += newCommandSize
+        guard header.sizeofcmds >= oldCommandSize else {
+            throw PlayCoverError.appCorrupted
+        }
+        header.sizeofcmds = header.sizeofcmds - oldCommandSize + newCommandSize
         let newHeaderData = Data(bytes: &header, count: headerSize)
         binary.replaceSubrange(0..<headerSize, with: newHeaderData)
     }

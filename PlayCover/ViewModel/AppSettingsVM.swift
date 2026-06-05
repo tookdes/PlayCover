@@ -7,6 +7,7 @@
 
 import Foundation
 
+@MainActor
 class AppSettingsVM: ObservableObject {
     let app: PlayApp
     @Published var settings: AppSettings

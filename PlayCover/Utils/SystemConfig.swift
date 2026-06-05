@@ -30,8 +30,12 @@ class SystemConfig {
     static func isPRAMValid() -> Bool {
         do {
             let check = try Shell.run("/usr/sbin/nvram", "boot-args")
-            for option in NVRAM_OPTIONS where check.contains(option) {
-                return true
+            let args = check.split(separator: " ").map(String.init)
+            for option in NVRAM_OPTIONS {
+                let optionParts = option.split(separator: " ").map(String.init)
+                if optionParts.allSatisfy({ args.contains($0) }) {
+                    return true
+                }
             }
             return false
         } catch {
@@ -42,8 +46,12 @@ class SystemConfig {
     static func isRunningAMFIEnabled() -> Bool {
         do {
             let check = try Shell.run("/usr/sbin/sysctl", "kern.bootargs")
-            for option in NVRAM_OPTIONS where check.contains(option) {
-                return true
+            let args = check.split(separator: " ").map(String.init)
+            for option in NVRAM_OPTIONS {
+                let optionParts = option.split(separator: " ").map(String.init)
+                if optionParts.allSatisfy({ args.contains($0) }) {
+                    return true
+                }
             }
             return false
         } catch {

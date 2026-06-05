@@ -17,7 +17,7 @@ public class IPA {
     public func allocateTempDir() throws {
         tmpDir = try FileManager.default.url(for: .itemReplacementDirectory,
                                              in: .userDomainMask,
-                                             appropriateFor: URL(fileURLWithPath: "/Users"),
+                                             appropriateFor: FileManager.default.homeDirectoryForCurrentUser,
                                              create: true)
     }
 
@@ -56,15 +56,14 @@ public class IPA {
             .appendingEscapedPathComponent(name)
             .appendingPathExtension("ipa")
 
-        try Shell.run("usr/bin/zip", "-r", newIpa.path, payload.path)
+        try Shell.run("/usr/bin/zip", "-r", newIpa.path, payload.path)
 
         return newIpa
     }
 
     private func getDocumentsDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let documentsDirectory = paths[0]
-        return documentsDirectory
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
     }
 
     enum Application {

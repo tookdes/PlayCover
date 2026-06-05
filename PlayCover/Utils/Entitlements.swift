@@ -7,6 +7,14 @@ import Foundation
 import Yams
 
 class Entitlements {
+    /// Validates that a bundle identifier contains only safe characters
+    static func isBundleIDSafe(_ bundleID: String) -> Bool {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
+        return bundleID.unicodeScalars.allSatisfy { allowed.contains($0) }
+            && !bundleID.contains("..")
+            && !bundleID.isEmpty
+    }
+
     // These are so critical they MUST be gone no matter what.
     static var critical = [
         "/bin/bash",
@@ -20,14 +28,12 @@ class Entitlements {
 
     static var playCoverEntitlementsDir: URL {
         let entFolder = PlayTools.playCoverContainer.appendingPathComponent("Entitlements")
-        if !FileManager.default.fileExists(atPath: entFolder.path) {
-            do {
-                try FileManager.default.createDirectory(at: entFolder,
-                                                        withIntermediateDirectories: true,
-                                                        attributes: [:])
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.createDirectory(at: entFolder,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: [:])
+        } catch {
+            Log.shared.error(error)
         }
         return entFolder
     }
@@ -40,7 +46,7 @@ class Entitlements {
     static func areEntitlementsValid(app: PlayApp) throws -> Bool {
         guard let old = try dumpEntitlements(exec: app.executable) as? [String: AnyHashable] else { return false }
         guard let new = try composeEntitlements(app) as? [String: AnyHashable] else { return false }
-        return new.hashValue == old.hashValue
+        return (old as NSDictionary).isEqual(to: new)
     }
 
     private static func setBaseEntitlements(_ base: inout [String: Any]) {
@@ -75,8 +81,15 @@ class Entitlements {
         if SystemConfig.isPlaySignActive {
             base["com.apple.private.tcc.allow"] = TCC.split(whereSeparator: \.isNewline)
             if let specific = try [String: Any].read(app.entitlements) {
+                let allowedPrefixes = [
+                    "com.apple.security",
+                    "com.apple.developer",
+                    "com.apple.private"
+                ]
                 for key in specific.keys {
-                    base[key] = specific[key]
+                    if allowedPrefixes.contains(where: { key.hasPrefix($0) }) {
+                        base[key] = specific[key]
+                    }
                 }
             }
         }
@@ -183,7 +196,7 @@ class Entitlements {
         } else if let bpath = Bundle.main.path(forResource: "default", ofType: "yaml") {
             path = URL(fileURLWithPath: bpath)
         } else {
-            throw "Default config not found: default.yaml"
+            throw ShellError(output: "Default config not found: default.yaml")
         }
 
         do {
@@ -193,11 +206,15 @@ class Entitlements {
             return decoded
         } catch {
             print("failed to get default rules at \(path): \(error)")
-            throw "failed to get default rules at \(path): \(error)"
+            throw ShellError(output: "failed to get default rules at \(path): \(error)")
         }
     }
 
     public static func getBundleRules(_ bundleID: String) throws -> PlayRules? {
+        guard isBundleIDSafe(bundleID) else {
+            Log.shared.error("Unsafe bundle identifier rejected: \(bundleID)")
+            return nil
+        }
         var path: URL
         let yamlURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config")

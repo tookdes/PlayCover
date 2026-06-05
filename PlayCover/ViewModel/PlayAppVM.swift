@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@MainActor
 class PlayAppVM: ObservableObject {
     @Published var app: PlayApp
     @Published var showSettings = false

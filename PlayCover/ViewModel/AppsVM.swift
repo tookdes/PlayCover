@@ -5,6 +5,7 @@
 
 import Foundation
 
+@MainActor
 class AppsVM: ObservableObject {
 
     public static let appDirectory = PlayTools.playCoverContainer.appendingPathComponent("Applications")
@@ -29,8 +30,11 @@ class AppsVM: ObservableObject {
     @Published var searchText: String = ""
     @Published var updatingApps = true
 
+    private var fetchTask: Task<Void, Never>?
+
     func fetchApps() {
-        Task { @MainActor in
+        fetchTask?.cancel()
+        fetchTask = Task { @MainActor in
             updatingApps = true
 
             filteredApps.removeAll()
@@ -43,12 +47,13 @@ class AppsVM: ObservableObject {
                 let subdirs = directoryContents.filter { $0.hasDirectoryPath }
 
                 for sub in subdirs {
+                    try Task.checkCancellation()
                     if sub.pathExtension.contains("app") &&
                         FileManager.default.fileExists(atPath: sub.appendingPathComponent("Info")
                                                                   .appendingPathExtension("plist")
                                                                   .path) {
                         let app = PlayApp(appUrl: sub)
-                        print("Application installed under:", sub.path)
+                        print("Application installed:", sub.lastPathComponent)
 
                         apps.append(app)
                         if searchText.isEmpty || app.searchText.contains(searchText.lowercased()) {
@@ -56,6 +61,9 @@ class AppsVM: ObservableObject {
                         }
                     }
                 }
+            } catch is CancellationError {
+                updatingApps = false
+                return
             } catch {
                 print(error)
             }
@@ -69,13 +77,16 @@ class AppsVM: ObservableObject {
                         .write(to: PlayApp.bundleIDCacheURL, atomically: false, encoding: .utf8)
                 }
 
+                var cachedBundleIDs = Set(try PlayApp.bundleIDCache)
+                let cacheFile = try FileHandle(forUpdating: PlayApp.bundleIDCacheURL)
+                defer { try? cacheFile.close() }
+                try cacheFile.seekToEnd()
+
                 for bundleId in apps.map({ $0.info.bundleIdentifier })
-                    where !(try PlayApp.bundleIDCache).contains(bundleId) {
+                    where !cachedBundleIDs.contains(bundleId) {
                     if let bundleID = "\(bundleId)\n".data(using: .utf8) {
-                        let cacheFile = try FileHandle(forUpdating: PlayApp.bundleIDCacheURL)
-                        try cacheFile.seekToEnd()
                         try cacheFile.write(contentsOf: bundleID)
-                        try cacheFile.close()
+                        cachedBundleIDs.insert(bundleId)
                     }
                 }
             } catch {

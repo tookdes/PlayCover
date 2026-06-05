@@ -5,6 +5,7 @@
 
 import Foundation
 
+@MainActor
 class AppIntegrity: ObservableObject {
 
     @Published var integrityOff: Bool = !AppIntegrity.insideAppsFolder
@@ -35,7 +36,7 @@ class AppIntegrity: ObservableObject {
 
     private static var insideAppsFolder: Bool {
         if let url = appUrl {
-            return url.path.contains("Xcode") || url.path.contains(expectedUrl.path)
+            return url.path.hasPrefix("/Applications/") || url.path.contains("Xcode")
         }
         return false
     }

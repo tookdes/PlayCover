@@ -7,6 +7,7 @@
 
 import Foundation
 
+@MainActor
 class StoreAppVM: ObservableObject {
     @Published var data: SourceAppsData
 

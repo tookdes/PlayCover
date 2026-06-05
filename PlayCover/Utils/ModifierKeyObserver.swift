@@ -7,6 +7,7 @@
 
 import Foundation
 
+@MainActor
 class ModifierKeyObserver: ObservableObject {
     static let shared = ModifierKeyObserver()
 

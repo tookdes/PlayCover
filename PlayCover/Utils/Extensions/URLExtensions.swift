@@ -16,6 +16,9 @@ extension String {
         for char in esc {
             str = str.replacingOccurrences(of: char, with: "\\" + char)
         }
+        str = str.replacingOccurrences(of: "\n", with: "\\n")
+        str = str.replacingOccurrences(of: "\r", with: "\\r")
+        str = str.replacingOccurrences(of: "\0", with: "\\0")
         return str
     }
 
@@ -68,9 +71,7 @@ extension URL {
     }
 
     func fixExecutable() throws {
-        var attributes = [FileAttributeKey: Any]()
-        attributes[.posixPermissions] = 0o777
-        try FileManager.default.setAttributes(attributes, ofItemAtPath: path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
     }
 
     // Wraps NSFileEnumerator since the geniuses at corelibs-foundation decided it should be completely untyped

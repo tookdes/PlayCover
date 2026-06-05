@@ -8,12 +8,12 @@ import UniformTypeIdentifiers
 
 extension FileManager {
     func delete(at url: URL) {
-        if FileManager.default.fileExists(atPath: url.path) {
-            do {
-                try FileManager.default.removeItem(atPath: url.path)
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch CocoaError.fileNoSuchFile {
+            // Expected when file doesn't exist — ignore
+        } catch {
+            Log.shared.error(error)
         }
     }
 }

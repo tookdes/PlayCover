@@ -26,7 +26,7 @@ class Shell: ObservableObject {
         process.waitUntilExit()
         let status = process.terminationStatus
         if status != 0 {
-            throw String(data: output, encoding: .utf8) ?? "Shell error occured"
+            throw ShellError(output: String(data: output, encoding: .utf8) ?? "Shell error occurred")
         }
         return String(data: output, encoding: .utf8) ?? "Shell error occured"
     }
@@ -35,14 +35,19 @@ class Shell: ObservableObject {
         let password = argc
         let passwordWithNewline = password + "\n"
         let sudo = Process()
-        sudo.launchPath = "/usr/bin/sudo"
+        sudo.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
         sudo.arguments = args
         let sudoIn = Pipe()
         let sudoOut = Pipe()
         sudo.standardOutput = sudoOut
         sudo.standardError = sudoOut
         sudo.standardInput = sudoIn
-        sudo.launch()
+        do {
+            try sudo.run()
+        } catch {
+            Log.shared.error(error)
+            return false
+        }
 
         var result = true
 
@@ -91,38 +96,42 @@ class Shell: ObservableObject {
                       "MetalForceHudEnabled", "-bool", String(enabled))
     }
 
-    static func lldb(_ url: URL, withTerminalWindow: Bool = false) throws {
+    static func lldb(_ url: URL, withTerminalWindow: Bool = false) {
         Task(priority: .utility) {
-            if withTerminalWindow {
-                let command = "/usr/bin/lldb -o run \(url.esc) -o exit"
-                    .replacingOccurrences(of: "\\", with: "\\\\")
-                let osascript = """
-                    tell app "Terminal"
-                        reopen
-                        activate
-                        do script "\(command)"
-                    end tell
-                """
-                let appleScript = NSAppleScript(source: osascript)
-                var possibleError: NSDictionary?
-                appleScript?.executeAndReturnError(&possibleError)
+            do {
+                if withTerminalWindow {
+                    let safePath = url.path.replacingOccurrences(
+                        of: "[^a-zA-Z0-9/._-]", with: "", options: .regularExpression)
+                    let command = "/usr/bin/lldb -o run \(safePath) -o exit"
+                    let osascript = """
+                        tell app "Terminal"
+                            reopen
+                            activate
+                            do script "\(command)"
+                        end tell
+                    """
+                    let appleScript = NSAppleScript(source: osascript)
+                    var possibleError: NSDictionary?
+                    appleScript?.executeAndReturnError(&possibleError)
 
-                if let error = possibleError {
-                    for key in error.allKeys {
-                        if let key = key as? String {
-                            throw error.value(forKey: key).debugDescription
+                    if let error = possibleError {
+                        for key in error.allKeys {
+                            if let key = key as? String {
+                                Log.shared.error(error.value(forKey: key).debugDescription)
+                            }
                         }
                     }
+                } else {
+                    try run("/usr/bin/lldb", "-o", "run", url.path, "-o", "exit")
                 }
-            } else {
-                try run("/usr/bin/lldb", "-o", "run", url.path, "-o", "exit")
+            } catch {
+                Log.shared.error(error)
             }
         }
     }
 }
 
-extension Swift.String: Swift.Error { }
-
-extension Swift.String: Foundation.LocalizedError {
-    public var errorDescription: String? { self }
+struct ShellError: Error, LocalizedError {
+    let output: String
+    var errorDescription: String? { output }
 }

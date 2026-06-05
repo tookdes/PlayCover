@@ -8,6 +8,7 @@
 import SwiftUI
 import DataCache
 
+@MainActor
 class KeymapViewVM: ObservableObject {
 
     public let app: PlayApp

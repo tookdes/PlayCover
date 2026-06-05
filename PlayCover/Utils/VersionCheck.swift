@@ -30,9 +30,13 @@ class VersionCheck {
             if let url = URL(string: app.link) {
                 if DownloadVM.shared.inProgress {
                     Log.shared.error(PlayCoverError.waitDownload)
+                    return false
                 } else {
-                    let redirectHandler = RedirectHandler(url: url) // checking page redirect
-                    DownloadApp(url: redirectHandler.getFinal(), app: app, warning: nil).start()
+                    let redirectHandler = RedirectHandler(url: url)
+                    await redirectHandler.resolve()
+                    await MainActor.run {
+                        DownloadApp(url: redirectHandler.getFinal(), app: app, warning: nil).start()
+                    }
                 }
             }
             return true

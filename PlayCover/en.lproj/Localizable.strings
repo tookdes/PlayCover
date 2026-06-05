@@ -129,6 +129,10 @@
 "button.Enable" = "Enable";
 "button.Reset" = "Reset";
 "button.Unlock" = "Unlock";
+"button.Delete" = "Delete";
+
+"alert.malicious.title" = "Malicious App Detected";
+"alert.malicious.text" = "This app has been identified as potentially malicious and may compromise your system. Do you want to delete it?";
 
 "state.enabled" = "Enabled";
 "state.disabled" = "Disabled";

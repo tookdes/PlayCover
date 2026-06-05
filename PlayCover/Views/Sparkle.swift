@@ -10,6 +10,7 @@ import Sparkle
 import SwiftUI
 
 // This view model class manages Sparkle's updater and publishes when new updates are allowed to be checked
+@MainActor
 final class UpdaterViewModel: ObservableObject {
     private let updaterController: SPUStandardUpdaterController
 

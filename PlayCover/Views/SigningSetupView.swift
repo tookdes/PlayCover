@@ -73,10 +73,14 @@ struct SignSetupView: View {
                         .font(.subheadline)
                     Spacer()
                     Button("configSigning.action.shutdown") {
-                        let source = "tell application \"Finder\"\nshut down\nend tell"
-                        let script = NSAppleScript(source: source)
-                        script?.executeAndReturnError(nil)
-                        isSigningSetupShown = false
+                        Task.detached {
+                            let source = "tell application \"Finder\"\nshut down\nend tell"
+                            let script = NSAppleScript(source: source)
+                            script?.executeAndReturnError(nil)
+                            await MainActor.run {
+                                isSigningSetupShown = false
+                            }
+                        }
                     }
                 } else {
                     if !AMFIEnabledInNVRAM && !AMFIEnabledInRunningOS {
@@ -99,10 +103,14 @@ struct SignSetupView: View {
                                 .font(.subheadline)
                             Spacer()
                             Button("configSigning.action.restart") {
-                                let source = "tell application \"Finder\"\nrestart\nend tell"
-                                let script = NSAppleScript(source: source)
-                                script?.executeAndReturnError(nil)
-                                isSigningSetupShown = false
+                                Task.detached {
+                                    let source = "tell application \"Finder\"\nrestart\nend tell"
+                                    let script = NSAppleScript(source: source)
+                                    script?.executeAndReturnError(nil)
+                                    await MainActor.run {
+                                        isSigningSetupShown = false
+                                    }
+                                }
                             }
                         } else {
                             Text("configSigning.step.complete")

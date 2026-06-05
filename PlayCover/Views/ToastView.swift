@@ -39,12 +39,10 @@ struct ToastView: View {
                         Text(toast.toastDetails)
                     }
                     .toastBackground()
-                    .onAppear {
-                        Task { @MainActor in
-                            try await Task.sleep(nanoseconds: toast.timeRemaining * 1000000000)
-                            // Next toast to be removed will always be the first in the list
-                            toastVM.toasts.removeFirst()
-                        }
+                    .task {
+                        try? await Task.sleep(nanoseconds: toast.timeRemaining * 1000000000)
+                        guard !toastVM.toasts.isEmpty else { return }
+                        toastVM.toasts.removeFirst()
                     }
                 }
                 if installVM.inProgress {

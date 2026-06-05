@@ -324,6 +324,11 @@
 "button.Enable" = "啟用";
 "button.Reset" = "重設";
 "button.Unlock" = "解鎖";
+"button.Delete" = "刪除";
+
+"alert.malicious.title" = "偵測到惡意應用程式";
+"alert.malicious.text" = "此應用程式已被識別為潛在惡意應用程式，可能會危害您的系統。是否要刪除它？";
+
 "settings.toggle.rootWorkDir.help" = "將應用程式的工作目錄改為/，就像在 iOS 上一樣。如果應用程式表現不正常，請將其關閉";
 "keycover.confirmMasterPassword" = "確認主密碼";
 "keycover.oldMasterPassword" = "目前主密碼";

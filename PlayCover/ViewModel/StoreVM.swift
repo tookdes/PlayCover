@@ -7,7 +7,8 @@
 
 import Foundation
 
-class StoreVM: ObservableObject, @unchecked Sendable {
+@MainActor
+class StoreVM: ObservableObject {
     public static let shared = StoreVM()
     private let plistSource: URL
 
@@ -184,7 +185,7 @@ class StoreVM: ObservableObject, @unchecked Sendable {
             }
             dataToDecode = data
         } catch {
-            debugPrint("Error decoding data from URL: \(url): \(error)")
+            debugPrint("Error fetching source data from: \(url.host ?? "local")")
             return (nil, .badjson)
         }
         guard let unwrappedData = dataToDecode else { return (nil, .badurl) }
@@ -201,7 +202,7 @@ class StoreVM: ObservableObject, @unchecked Sendable {
                 decodedData = SourceJSON(name: sourceName, data: oldTypeJson, id: sourceId)
                 return (decodedData, .valid)
             } catch {
-                debugPrint("Error decoding data from URL: \(url): \(error)")
+                debugPrint("Error decoding source data from: \(url.host ?? "local")")
                 return (nil, .badjson)
             }
         }

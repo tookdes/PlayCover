@@ -99,14 +99,12 @@ class AppSettings {
     static var appSettingsDir: URL {
         let settingsFolder =
             PlayTools.playCoverContainer.appendingPathComponent("App Settings")
-        if !FileManager.default.fileExists(atPath: settingsFolder.path) {
-            do {
-                try FileManager.default.createDirectory(at: settingsFolder,
-                                                        withIntermediateDirectories: true,
-                                                        attributes: [:])
-            } catch {
-                Log.shared.error(error)
-            }
+        do {
+            try FileManager.default.createDirectory(at: settingsFolder,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: [:])
+        } catch {
+            Log.shared.error(error)
         }
         return settingsFolder
     }
@@ -139,6 +137,7 @@ class AppSettings {
 
     public func reset() {
         settings = AppSettingsData()
+        settings.bundleIdentifier = info.bundleIdentifier
     }
 
     @discardableResult

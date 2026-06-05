@@ -13,7 +13,8 @@ class PlayApp: BaseApp {
 
     public static var bundleIDCache: [String] {
         get throws {
-            (try String(contentsOf: bundleIDCacheURL))
+            guard FileManager.default.fileExists(atPath: bundleIDCacheURL.path) else { return [] }
+            return (try String(contentsOf: bundleIDCacheURL))
                 .split(whereSeparator: \.isNewline)
                 .map { String($0) }
         }
@@ -64,13 +65,25 @@ class PlayApp: BaseApp {
     func launch() async {
         do {
             isStarting = true
+            defer { isStarting = false }
 
             if prohibitedToPlay {
                 await clearAllCache()
                 throw PlayCoverError.appProhibited
             } else if maliciousProhibited {
                 await clearAllCache()
-                deleteApp()
+                let shouldDelete = await MainActor.run { () -> Bool in
+                    let alert = NSAlert()
+                    alert.messageText = NSLocalizedString("alert.malicious.title", comment: "")
+                    alert.informativeText = NSLocalizedString("alert.malicious.text", comment: "")
+                    alert.alertStyle = .critical
+                    alert.addButton(withTitle: NSLocalizedString("button.Delete", comment: ""))
+                    alert.addButton(withTitle: NSLocalizedString("button.Cancel", comment: ""))
+                    return alert.runModal() == .alertFirstButtonReturn
+                }
+                if shouldDelete {
+                    deleteApp()
+                }
                 throw PlayCoverError.appMaliciousProhibited
             }
 
@@ -104,12 +117,11 @@ class PlayApp: BaseApp {
                 self.clearDebugAffectingEnvironment()
 
                 if settings.openWithLLDB {
-                    try Shell.lldb(executable, withTerminalWindow: settings.openLLDBWithTerminal)
+                    Shell.lldb(executable, withTerminalWindow: settings.openLLDBWithTerminal)
                 } else {
                     runAppExec() // Splitting to reduce complexity
                 }
             }
-            isStarting = false
         } catch {
             Log.shared.error(error)
         }
@@ -267,7 +279,7 @@ extension PlayApp {
             return try PlayTools.installedInExec(atURL: url.appendingEscapedPathComponent(info.executableName))
         } catch {
             Log.shared.error(error)
-            return true
+            return false
         }
     }
 
@@ -335,12 +347,11 @@ extension PlayApp {
             let tmpEnts = tmpDir
                 .appendingEscapedPathComponent(ProcessInfo().globallyUniqueString)
                 .appendingPathExtension("plist")
+            defer { try? FileManager.default.removeItem(at: tmpEnts) }
             let conf = try Entitlements.composeEntitlements(self)
             try conf.store(tmpEnts)
             try Shell.signAppWith(executable, entitlements: tmpEnts)
-            try FileManager.default.removeItem(at: tmpEnts)
         } catch {
-            print(error)
             Log.shared.error(error)
         }
     }
