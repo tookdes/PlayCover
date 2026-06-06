@@ -31,13 +31,11 @@ class DownloadApp {
         self.warning = warning
     }
 
-    let downloadVM = DownloadVM.shared
-    let installVM = InstallVM.shared
     let downloader = DownloadManager.shared
 
     @MainActor
     func start() {
-        if installVM.inProgress {
+        if InstallVM.shared.inProgress {
             Log.shared.error(PlayCoverError.waitInstallation)
         } else {
             if let app = app, PlayApp.PROHIBITED_APPS.contains(app.bundleID) {
@@ -97,13 +95,14 @@ class DownloadApp {
     func cancel() {
         downloader.cancelAllDownloads()
 
-        downloadVM.next(.canceled, 0.95, 1.0)
-        downloadVM.storeAppData = nil
+        DownloadVM.shared.next(.canceled, 0.95, 1.0)
+        DownloadVM.shared.storeAppData = nil
     }
 
+    @MainActor
     private func proceedDownload(_ finalURL: URL) {
-        self.downloadVM.storeAppData = self.app
-        self.downloadVM.next(.downloading, 0.0, 0.7)
+        DownloadVM.shared.storeAppData = self.app
+        DownloadVM.shared.next(.downloading, 0.0, 0.7)
 
         var tmpDir: URL?
         do {
@@ -117,30 +116,32 @@ class DownloadApp {
                                        destinationURL: tmpDir,
                                        onProgress: { progress in
                     Task { @MainActor in
-                        self.downloadVM.progress = Double(progress)
+                        DownloadVM.shared.progress = Double(progress)
                     }
                 }, onCompletion: { error, fileURL in
                     Task { @MainActor in
-                        self.downloadVM.next(.integrity, 0.7, 0.95)
+                        DownloadVM.shared.next(.integrity, 0.7, 0.95)
 
                         if let error = error {
-                            self.downloadVM.next(.failed, 0.95, 1.0)
-                            self.downloadVM.storeAppData = nil
+                            DownloadVM.shared.next(.failed, 0.95, 1.0)
+                            DownloadVM.shared.storeAppData = nil
                             return Log.shared.error(error)
                         }
 
-                        self.verifyChecksum(checksum: self.downloadVM.storeAppData?.checksum,
+                        self.verifyChecksum(checksum: DownloadVM.shared.storeAppData?.checksum,
                                             file: fileURL) { completing in
-                            self.downloadVM.next(completing ? .finish : .failed, 0.95, 1.0)
-                            if completing {
-                                self.proceedInstall(fileURL)
+                            Task { @MainActor in
+                                DownloadVM.shared.next(completing ? .finish : .failed, 0.95, 1.0)
+                                if completing {
+                                    self.proceedInstall(fileURL)
+                                }
                             }
                         }
                     }
                 })
             }
         } catch {
-            self.downloadVM.next(.failed, 0.95, 1.0)
+            DownloadVM.shared.next(.failed, 0.95, 1.0)
 
             if let tmpDir = tmpDir {
                 FileManager.default.delete(at: tmpDir)
@@ -191,7 +192,7 @@ class DownloadApp {
                     NotifyService.shared.notify(
                         NSLocalizedString("notification.appInstalled", comment: ""),
                         NSLocalizedString("notification.appInstalled.message", comment: ""))
-                    self.downloadVM.storeAppData = nil
+                    DownloadVM.shared.storeAppData = nil
                 }
             })
         }

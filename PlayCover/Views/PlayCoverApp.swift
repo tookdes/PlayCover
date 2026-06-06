@@ -5,6 +5,7 @@
 
 import SwiftUI
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     @AppStorage("ShowLowPowerModeAlert") var showLowPowerModeAlert = true
 

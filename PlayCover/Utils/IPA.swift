@@ -101,57 +101,71 @@ public class IPA {
         return false
     }
 
-    @MainActor
     func checkOfficialMacOS(app: Application) async -> Bool {
-        let bundleID: String
         let appID: Int
         switch app {
         case .base(let base):
-            bundleID = base.info.bundleIdentifier
+            let bundleID = base.info.bundleIdentifier
             let urlString = "https://itunes.apple.com/lookup?bundleId=\(bundleID)"
             let itunes: ITunesResponse? = await getITunesData(urlString)
             appID = itunes?.results.first?.trackId ?? 0
         case .store(let store):
-            bundleID = store.bundleID
             let appLookup = store.itunesLookup
-            let stringArray = appLookup.components(separatedBy: CharacterSet.decimalDigits.inverted)
-            appID = Int(stringArray.last ?? "0") ?? 0
+            appID = IPA.appID(from: appLookup) ?? 0
+        }
+        guard appID != 0 else {
+            return false
         }
         let supportMacOS: Bool = await checkMacOSCompatibility(appID: appID)
-        let showAlert = InstallPreferences.shared.showAppStorePopup
+        let showAlert = await MainActor.run { InstallPreferences.shared.showAppStorePopup }
         if showAlert && supportMacOS {
-            let alert = NSAlert()
-            alert.messageText = NSLocalizedString("alert.appstore", comment: "")
-            alert.informativeText = String(
-                format: NSLocalizedString("macos.version", comment: "")
-            )
-            alert.icon = nil
-            alert.showsSuppressionButton = true
-            alert.suppressionButton?.toolTip = NSLocalizedString("alert.supression", comment: "String")
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: NSLocalizedString("alert.install.anyway", comment: ""))
-            alert.addButton(withTitle: NSLocalizedString("alert.open.appstore", comment: ""))
-            alert.addButton(withTitle: NSLocalizedString("button.Cancel", comment: ""))
-            let result = alert.runModal()
-            switch result {
-            case .alertFirstButtonReturn:
-                if let suppressionButton = alert.suppressionButton,
-                   suppressionButton.state == .on {
-                    InstallPreferences.shared.showAppStorePopup = false
-                }
-                return false
-            case .alertSecondButtonReturn:
-                if appID != 0 {
-                    guard let urlApp = URL(string:
-                                            "itms-apps://apps.apple.com/app/id\(appID)")
-                    else {return true}
-                    NSWorkspace.shared.open(urlApp)
-                }
-                return true
-            default:
-                return true
-            }
+            return await showMacOSCompatibilityAlert(appID: appID)
         }
         return false
+    }
+
+    @MainActor
+    private func showMacOSCompatibilityAlert(appID: Int) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("alert.appstore", comment: "")
+        alert.informativeText = String(
+            format: NSLocalizedString("macos.version", comment: "")
+        )
+        alert.icon = nil
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.toolTip = NSLocalizedString("alert.supression", comment: "String")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: NSLocalizedString("alert.install.anyway", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("alert.open.appstore", comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("button.Cancel", comment: ""))
+        let result = alert.runModal()
+        switch result {
+        case .alertFirstButtonReturn:
+            if let suppressionButton = alert.suppressionButton,
+               suppressionButton.state == .on {
+                InstallPreferences.shared.showAppStorePopup = false
+            }
+            return false
+        case .alertSecondButtonReturn:
+            if appID != 0 {
+                guard let urlApp = URL(string:
+                                        "itms-apps://apps.apple.com/app/id\(appID)")
+                else { return true }
+                NSWorkspace.shared.open(urlApp)
+            }
+            return true
+        default:
+            return true
+        }
+    }
+
+    private static func appID(from lookup: String) -> Int? {
+        if let range = lookup.range(of: #"id=?\d+"#, options: .regularExpression) {
+            let matched = lookup[range]
+                .dropFirst(2)
+                .drop(while: { $0 == "=" })
+            return Int(matched)
+        }
+        return nil
     }
 }

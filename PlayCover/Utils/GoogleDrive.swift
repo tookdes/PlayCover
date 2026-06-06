@@ -10,6 +10,7 @@ import SwiftSoup
 
 class RedirectHandler: NSObject, URLSessionTaskDelegate {
     private var finalURL: URL
+    private let stateLock = NSLock()
     private var continuation: CheckedContinuation<Void, Never>?
     lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -31,13 +32,17 @@ class RedirectHandler: NSObject, URLSessionTaskDelegate {
     }
 
     func getFinal() -> URL {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         return finalURL
     }
 
     /// Async wait for redirect resolution with timeout
     func resolve() async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            self.stateLock.lock()
             self.continuation = continuation
+            self.stateLock.unlock()
             // Check if all tasks are already done
             self.checkCompletion()
         }
@@ -50,20 +55,17 @@ class RedirectHandler: NSObject, URLSessionTaskDelegate {
             // Check if session has no outstanding tasks
             self.session.getTasksWithCompletionHandler { _, _, tasks in
                 if tasks.isEmpty {
-                    self.continuation?.resume()
-                    self.continuation = nil
+                    self.finishResolve()
                 } else {
                     // Wait a bit more and check again
                     DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
                         self?.session.getTasksWithCompletionHandler { _, _, tasks in
                             if tasks.isEmpty {
-                                self?.continuation?.resume()
-                                self?.continuation = nil
+                                self?.finishResolve()
                             } else {
                                 // Final timeout after 5 seconds total
                                 DispatchQueue.global().asyncAfter(deadline: .now() + 4.4) { [weak self] in
-                                    self?.continuation?.resume()
-                                    self?.continuation = nil
+                                    self?.finishResolve()
                                 }
                             }
                         }
@@ -74,7 +76,17 @@ class RedirectHandler: NSObject, URLSessionTaskDelegate {
     }
 
     private func setFinal(url: URL) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         self.finalURL = url
+    }
+
+    private func finishResolve() {
+        stateLock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        stateLock.unlock()
+        continuation?.resume()
     }
 
     private func fetchGoogleDrivePageContent(url: String, completion: @escaping (String?) -> Void) {

@@ -51,7 +51,7 @@ class Keymapping {
     init(_ info: AppInfo) {
         self.info = info
 
-        self.baseKeymapURL = Keymapping.keymappingDir.appendingPathComponent(info.bundleIdentifier)
+        self.baseKeymapURL = Keymapping.keymappingDir.appendingSafeFileNameComponent(info.bundleIdentifier)
         self.configURL = baseKeymapURL.appendingPathComponent(".config").appendingPathExtension("plist")
 
         do {

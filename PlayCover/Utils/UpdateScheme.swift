@@ -81,7 +81,7 @@ class UpdateScheme {
                 app.removeAlias()
                 try FileManager.default.moveItem(at: app.url,
                                                  to: AppsVM.appDirectory
-                    .appendingPathComponent(app.info.bundleIdentifier)
+                    .appendingSafeFileNameComponent(app.info.bundleIdentifier)
                     .appendingPathExtension("app"))
             }
         }
@@ -98,7 +98,7 @@ class UpdateScheme {
 
         for file in directoryContents where file.pathExtension.contains("plist") {
             let bundleId = file.deletingPathExtension().lastPathComponent
-            let appKeymapDir = Keymapping.keymappingDir.appendingPathComponent(bundleId)
+            let appKeymapDir = Keymapping.keymappingDir.appendingSafeFileNameComponent(bundleId)
             let keymapFileURL = appKeymapDir.appendingPathComponent("default")
                                             .appendingPathExtension("plist")
 

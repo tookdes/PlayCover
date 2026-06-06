@@ -28,7 +28,7 @@ class LegacySettings {
                     for (key, value) in dictionary {
                         if let dict = value as? [String: Any] {
                             if let settings = convertLegacySettingsDict(dict) {
-                                let settingsURL = AppSettings.appSettingsDir.appendingPathComponent(key)
+                                let settingsURL = AppSettings.appSettingsDir.appendingSafeFileNameComponent(key)
                                                                             .appendingPathExtension("plist")
                                 do {
                                     let data = try PropertyListEncoder().encode(settings)
@@ -40,7 +40,7 @@ class LegacySettings {
 
                             if let legacyKeymaps = dict["pc.layout"] as? [Any] {
                                 let keymap = convertLegacyKeymapArray(legacyKeymaps, key)
-                                let keymapURL = Keymapping.keymappingDir.appendingPathComponent(key)
+                                let keymapURL = Keymapping.keymappingDir.appendingSafeFileNameComponent(key)
                                                                         .appendingPathExtension("plist")
                                 do {
                                     let data = try PropertyListEncoder().encode(keymap)

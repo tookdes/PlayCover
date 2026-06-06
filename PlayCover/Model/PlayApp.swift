@@ -55,7 +55,7 @@ class PlayApp: BaseApp {
         .appendingPathComponent("PlayCover")
 
     lazy var aliasURL = PlayApp.aliasDirectory.appendingPathComponent(name).appendingPathExtension("app")
-    lazy var playChainURL = KeyCover.playChainPath.appendingPathComponent(info.bundleIdentifier)
+    lazy var playChainURL = KeyCover.playChainPath.appendingSafeFileNameComponent(info.bundleIdentifier)
 
     lazy var settings = AppSettings(info)
     lazy var keymapping = Keymapping(info)
@@ -87,7 +87,9 @@ class PlayApp: BaseApp {
                 throw PlayCoverError.appMaliciousProhibited
             }
 
-            AppsVM.shared.fetchApps()
+            await MainActor.run {
+                AppsVM.shared.fetchApps()
+            }
             if await VersionCheck.shared.checkNewVersion(myApp: self) { return }
 
             settings.sync()
@@ -338,7 +340,9 @@ extension PlayApp {
 
     func deleteApp() {
         FileManager.default.delete(at: URL(fileURLWithPath: url.path))
-        AppsVM.shared.fetchApps()
+        Task { @MainActor in
+            AppsVM.shared.fetchApps()
+        }
     }
 
     func sign() {

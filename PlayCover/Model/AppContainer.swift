@@ -15,14 +15,14 @@ struct AppContainer {
 
     let bundleId: String
     var containerUrl: URL {
-        AppContainer.containersURL.appendingPathComponent(bundleId)
+        AppContainer.containersURL.appendingSafeFileNameComponent(bundleId)
     }
 
     var userPrefsUrl: URL {
         containerUrl.appendingPathComponent("Data")
             .appendingPathComponent("Library")
             .appendingPathComponent("Preferences")
-            .appendingPathComponent(bundleId)
+            .appendingSafeFileNameComponent(bundleId)
             .appendingPathExtension("plist")
     }
 

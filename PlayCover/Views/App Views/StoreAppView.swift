@@ -264,8 +264,8 @@ struct StoreAppConditionalView: View {
                 await Cacher.shared.resolveITunesData(app.itunesLookup)
             }
             itunesResponse = try? cache.readCodable(forKey: app.itunesLookup)
-            if let response = itunesResponse {
-                onlineIcon = response.results[0].artworkUrl512
+            if let onlineArtwork = itunesResponse?.results.first?.artworkUrl512 {
+                onlineIcon = onlineArtwork
             } else {
                 localIcon = Cacher.shared.getLocalIcon(bundleId: app.bundleID)
             }

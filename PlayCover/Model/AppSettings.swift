@@ -121,7 +121,7 @@ class AppSettings {
 
     init(_ info: AppInfo) {
         self.info = info
-        settingsUrl = AppSettings.appSettingsDir.appendingPathComponent(info.bundleIdentifier)
+        settingsUrl = AppSettings.appSettingsDir.appendingSafeFileNameComponent(info.bundleIdentifier)
                                                 .appendingPathExtension("plist")
         settings = AppSettingsData()
         if !decode() {

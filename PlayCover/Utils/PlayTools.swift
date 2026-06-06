@@ -72,20 +72,26 @@ class PlayTools {
         var binary = try Data(contentsOf: exec)
         try Macho.stripBinary(&binary)
 
-        Inject.injectMachO(machoPath: exec.path,
-                           cmdType: .loadDylib,
-                           backup: false,
-                           injectPath: playToolsPath.path,
-                           finishHandle: { result in
-            if result {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Inject.injectMachO(machoPath: exec.path,
+                               cmdType: .loadDylib,
+                               backup: false,
+                               injectPath: playToolsPath.path,
+                               finishHandle: { result in
+                guard result else {
+                    continuation.resume(throwing: ShellError(output: "Failed to inject PlayTools"))
+                    return
+                }
+
                 do {
                     try installPluginInIPA(exec.deletingLastPathComponent())
                     try Shell.signApp(exec)
+                    continuation.resume(returning: ())
                 } catch {
-                    Log.shared.error(error)
+                    continuation.resume(throwing: error)
                 }
-            }
-        })
+            })
+        }
     }
 
     static func installPluginInIPA(_ payload: URL) throws {
@@ -140,53 +146,61 @@ class PlayTools {
         return target
     }
 
-    static func injectInIPA(_ exec: URL, payload: URL) throws {
+    static func injectInIPA(_ exec: URL, payload: URL) async throws {
         var binary = try Data(contentsOf: exec)
         try Macho.stripBinary(&binary)
 
-        Inject.injectMachO(machoPath: exec.path,
-                           cmdType: .loadDylib,
-                           backup: false,
-                           injectPath: "@executable_path/Frameworks/PlayTools.dylib",
-                           finishHandle: { result in
-            if result {
-                Task(priority: .background) {
-                    do {
-                        if !FileManager.default.fileExists(atPath: payload.appendingPathComponent("Frameworks").path) {
-                            try FileManager.default.createDirectory(
-                                at: payload.appendingPathComponent("Frameworks"),
-                                withIntermediateDirectories: true)
-                        }
-
-                        let libraryTarget = payload.appendingPathComponent("Frameworks")
-                            .appendingPathComponent("PlayTools")
-                            .appendingPathExtension("dylib")
-
-                        let tools = bundledPlayToolsFramework
-                            .appendingPathComponent("PlayTools")
-
-                        if FileManager.default.fileExists(atPath: libraryTarget.path) {
-                            try FileManager.default.removeItem(at: libraryTarget)
-                        }
-                        try FileManager.default.copyItem(at: tools, to: libraryTarget)
-
-                        try libraryTarget.fixExecutable()
-                        try installPluginInIPA(payload)
-                    } catch {
-                        Log.shared.error(error)
-                    }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Inject.injectMachO(machoPath: exec.path,
+                               cmdType: .loadDylib,
+                               backup: false,
+                               injectPath: "@executable_path/Frameworks/PlayTools.dylib",
+                               finishHandle: { result in
+                guard result else {
+                    continuation.resume(throwing: ShellError(output: "Failed to inject PlayTools"))
+                    return
                 }
-            }
-        })
+
+                do {
+                    let frameworks = payload.appendingPathComponent("Frameworks")
+                    if !FileManager.default.fileExists(atPath: frameworks.path) {
+                        try FileManager.default.createDirectory(at: frameworks, withIntermediateDirectories: true)
+                    }
+
+                    let libraryTarget = frameworks
+                        .appendingPathComponent("PlayTools")
+                        .appendingPathExtension("dylib")
+
+                    let tools = bundledPlayToolsFramework
+                        .appendingPathComponent("PlayTools")
+
+                    if FileManager.default.fileExists(atPath: libraryTarget.path) {
+                        try FileManager.default.removeItem(at: libraryTarget)
+                    }
+                    try FileManager.default.copyItem(at: tools, to: libraryTarget)
+
+                    try libraryTarget.fixExecutable()
+                    try installPluginInIPA(payload)
+                    continuation.resume(returning: ())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            })
+        }
     }
 
-    static func removeFromApp(_ exec: URL) async {
-        Inject.removeMachO(machoPath: exec.path,
-                           cmdType: .loadDylib,
-                           backup: false,
-                           injectPath: playToolsPath.path,
-                           finishHandle: { result in
-            if result {
+    static func removeFromApp(_ exec: URL) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Inject.removeMachO(machoPath: exec.path,
+                               cmdType: .loadDylib,
+                               backup: false,
+                               injectPath: playToolsPath.path,
+                               finishHandle: { result in
+                guard result else {
+                    continuation.resume(throwing: ShellError(output: "Failed to remove PlayTools"))
+                    return
+                }
+
                 do {
                     let pluginUrl = exec.deletingLastPathComponent()
                         .appendingPathComponent("PlugIns")
@@ -197,11 +211,12 @@ class PlayTools {
                         try FileManager.default.removeItem(at: pluginUrl)
                     }
                     try Shell.signApp(exec)
+                    continuation.resume(returning: ())
                 } catch {
-                    Log.shared.error(error)
+                    continuation.resume(throwing: error)
                 }
-            }
-        })
+            })
+        }
     }
 
     static func installedInExec(atURL url: URL) throws -> Bool {

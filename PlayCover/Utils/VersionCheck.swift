@@ -46,8 +46,9 @@ class VersionCheck {
     }
 
     func checkNewVersion(myApp: PlayApp) async -> Bool {
-        await StoreVM.shared.awaitResolveSources()
-        let storeApp = StoreVM.shared.sourcesApps
+        let storeVM = await MainActor.run { StoreVM.shared }
+        await storeVM.awaitResolveSources()
+        let storeApp = await MainActor.run { storeVM.sourcesApps }
         if let app = storeApp.first(where: {$0.bundleID == myApp.info.bundleIdentifier}) {
             if myApp.info.bundleVersion.compare(app.version, options: .numeric) == .orderedAscending {
                 return await checkUpdateAlert(app: app)

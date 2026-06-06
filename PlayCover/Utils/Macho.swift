@@ -17,6 +17,12 @@ class Macho {
                 swap_fat_header(&header, NXHostByteOrder())
             }
 
+            let archSize = MemoryLayout<fat_arch>.size
+            guard offset <= binary.count,
+                  Int(header.nfat_arch) <= (binary.count - offset) / archSize else {
+                throw PlayCoverError.appCorrupted
+            }
+
             for _ in 0..<header.nfat_arch {
                 var arch = binary.extract(fat_arch.self, offset: offset)
                 if shouldSwap {
@@ -26,13 +32,21 @@ class Macho {
                 if arch.cputype == CPU_TYPE_ARM64 {
                     print("Found ARM64 arch in fat binary")
 
-                    binary = binary
-                        .subdata(in: Int(arch.offset)..<Int(arch.offset+arch.size))
+                    let archOffset = Int(arch.offset)
+                    let archLength = Int(arch.size)
+                    guard archOffset >= 0,
+                          archLength >= 0,
+                          archOffset <= binary.count,
+                          archLength <= binary.count - archOffset else {
+                        throw PlayCoverError.appCorrupted
+                    }
+
+                    binary = binary.subdata(in: archOffset..<(archOffset + archLength))
 
                     return
                 }
 
-                offset += Int(MemoryLayout.size(ofValue: arch))
+                offset += archSize
             }
 
             throw PlayCoverError.failedToStripBinary
@@ -196,6 +210,9 @@ class Macho {
         }
 
         let injectionEnd = movedCommandsEnd - Int(oldCommandSize) + Int(newCommandSize)
+        guard injectionEnd <= binary.count else {
+            throw PlayCoverError.appCorrupted
+        }
         if injectionEnd > movedCommandsEnd {
             if let nonZero = binary[movedCommandsEnd ..< injectionEnd].first(where: {$0 != 0}) {
                 print("Non zero value \(nonZero) found after load commands. Injection may overlap data section")
@@ -225,20 +242,24 @@ class Macho {
             print("Slim Mach-O has reversed byte order")
         }
 
-        let allCommandsEnd = headerSize + Int(header.sizeofcmds)
-        if allCommandsEnd >= binary.count || allCommandsEnd <= headerSize {
+        let sizeofcmds = Int(header.sizeofcmds)
+        guard headerSize <= binary.count,
+              sizeofcmds > 0,
+              sizeofcmds <= binary.count - headerSize else {
             print("Cannot iterate load commands: Mach-O file is corrupted(-1)")
             throw PlayCoverError.appCorrupted
         }
+        let allCommandsEnd = headerSize + sizeofcmds
         for index in 0..<header.ncmds {
             let loadCommand = binary.extract(load_command.self,
                                              offset: offset,
                                              swap: shouldSwap ? swap_load_command:nil)
-            let commandEnd = offset + Int(loadCommand.cmdsize)
-            if commandEnd > allCommandsEnd || commandEnd <= offset {
+            let commandSize = Int(loadCommand.cmdsize)
+            if offset > allCommandsEnd || commandSize <= 0 || commandSize > allCommandsEnd - offset {
                 print("Cannot iterate load commands: Mach-O file is corrupted(\(index))")
                 throw PlayCoverError.appCorrupted
             }
+            let commandEnd = offset + commandSize
             let terminated = evaluate(offset, shouldSwap)
             offset = commandEnd
             if terminated {

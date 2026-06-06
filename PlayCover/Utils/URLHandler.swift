@@ -35,28 +35,31 @@ struct URLHandler {
 
     @MainActor
     func processURL(url: URL) {
+        if url.isFileURL && url.pathExtension.lowercased() == "ipa" {
+            Installer.install(ipaUrl: url, export: false, returnCompletion: { _ in
+                Task { @MainActor in
+                    AppsVM.shared.fetchApps()
+                    NotifyService.shared.notify(
+                        NSLocalizedString("notification.appInstalled", comment: ""),
+                        NSLocalizedString("notification.appInstalled.message", comment: "")
+                    )
+                }
+            })
+            return
+        }
+
         // Validate URL scheme to prevent processing unexpected schemes
         guard url.scheme == "playcover" || url.scheme == "playcoverapp" else {
             NSLog("Rejected URL with unexpected scheme: \(url.scheme ?? "nil")")
             return
         }
 
-        guard let urlComponenents = NSURLComponents(url: url, resolvingAgainstBaseURL: false),
-              let uriHost = urlComponenents.host,
-              let params = urlComponenents.queryItems else {
-                // Fall back to old url handler (for files)
-                if url.pathExtension == "ipa" {
-                    Installer.install(ipaUrl: url, export: false, returnCompletion: { _ in
-                    Task { @MainActor in
-                        AppsVM.shared.fetchApps()
-                        NotifyService.shared.notify(
-                            NSLocalizedString("notification.appInstalled", comment: ""),
-                            NSLocalizedString("notification.appInstalled.message", comment: "")
-                        )
-                    }})
-                }
-                return
-            }
+        guard let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let uriHost = urlComponents.host,
+              let params = urlComponents.queryItems else {
+            NSLog("Unknown URL: \(url)")
+            return
+        }
         // URI format: playcoverapp://<object>?action=<action>&<param>=<value>
         // Example: playcoverapp://source?action=add&url=https://homebrew.playcover.io
         // Switch case for main uri path
@@ -69,41 +72,39 @@ struct URLHandler {
         }
     }
 
+    @MainActor
     func processSourceURL(params: [URLQueryItem]) {
-        // Make dang sure we have the params we need and they match expected query items
-        guard params.count == 2,
-              params[0].name == "action",
-              params[1].name == "url" else {
+        var paramValues: [String: String] = [:]
+        for param in params {
+            guard let value = param.value else { continue }
+            paramValues[param.name] = value
+        }
+
+        guard let actionParam = paramValues["action"],
+              let source = paramValues["url"],
+              let sourceURL = URL(string: source),
+              sourceURL.scheme == "https",
+              sourceURL.host?.isEmpty == false else {
             // Print params to logs and break
             NSLog("Unknown source URL params: \(params)")
             return
         }
 
-        if let actionParam = params[0].value {
-            URLObservable.shared.type = .source
-            switch actionParam {
-            case "add":
-                // Add source - validate URL is HTTPS
-                if let url = params[1].value, URL(string: url)?.scheme == "https" {
-                    URLObservable.shared.url = url
-                    URLObservable.shared.action = .add
-                }
-            case "remove":
-                // Remove source - validate URL is HTTPS
-                if let url = params[1].value, URL(string: url)?.scheme == "https" {
-                    URLObservable.shared.url = url
-                    URLObservable.shared.action = .remove
-                }
-            case "update":
-                // Update source - validate URL is HTTPS
-                if let url = params[1].value, URL(string: url)?.scheme == "https" {
-                    URLObservable.shared.url = url
-                    URLObservable.shared.action = .update
-                }
-            default:
-                // Print params to console and break
-                print("Unknown source URL params: \(params)")
-            }
+        let action: URLAction
+        switch actionParam {
+        case "add":
+            action = .add
+        case "remove":
+            action = .remove
+        case "update":
+            action = .update
+        default:
+            NSLog("Unknown source URL params: \(params)")
+            return
         }
+
+        URLObservable.shared.type = .source
+        URLObservable.shared.url = sourceURL.absoluteString
+        URLObservable.shared.action = action
     }
 }

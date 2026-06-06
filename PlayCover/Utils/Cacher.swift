@@ -43,7 +43,7 @@ class Cacher {
         let lock = NSLock()
         let compareStr = app.info.bundleIdentifier + app.info.bundleVersion
 
-        app.url.enumerateContents(blocking: false) { file, _ in
+        app.url.enumerateContents { file, _ in
             if file.lastPathComponent.contains(app.info.primaryIconName), let icon = NSImage(contentsOf: file) {
                 lock.lock()
                 let shouldReplace = self.checkImageDimensions(icon, bestResImage)
@@ -72,15 +72,11 @@ class Cacher {
     }
 
     func getLocalIcon(bundleId: String) -> NSImage? {
-        if let app = AppsVM.shared.apps.first(where: { $0.info.bundleIdentifier == bundleId }) {
-            return cache.readImage(forKey: app.info.bundleIdentifier)
-        } else {
-            return nil
-        }
+        cache.readImage(forKey: bundleId)
     }
 
     private func checkImageDimensions(_ new: NSImage, _ currentBest: NSImage?) -> Bool {
-        return new.size.height > currentBest?.size.height ?? -1
+        return new.size.height > (currentBest?.size.height ?? -1)
     }
 }
 

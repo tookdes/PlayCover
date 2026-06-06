@@ -219,7 +219,7 @@ class Entitlements {
         let yamlURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config")
             .appendingPathComponent("PlayCover")
-            .appendingPathComponent(bundleID)
+            .appendingSafeFileNameComponent(bundleID)
             .appendingPathExtension("yaml")
         if FileManager.default.fileExists(atPath: yamlURL.path) {
             path = yamlURL

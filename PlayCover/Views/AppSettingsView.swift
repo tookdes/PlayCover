@@ -644,12 +644,13 @@ struct MiscView: View {
                         task = .applicationCategoryType
                         app.info.applicationCategoryType = applicationCategoryType
                         Task.detached {
-                            do {
-                                try await Shell.signApp(app.executable)
-
+                            defer {
                                 Task { @MainActor in
                                     task = .none
                                 }
+                            }
+                            do {
+                                try Shell.signApp(app.executable)
                             } catch {
                                 Log.shared.error(error)
                             }
@@ -734,23 +735,22 @@ struct MiscView: View {
                     Button {
                         task = .playTools
                         Task(priority: .userInitiated) {
-                            if hasPlayTools ?? true {
-                                await PlayTools.removeFromApp(app.executable)
-                            } else {
-                                do {
+                            do {
+                                if hasPlayTools ?? true {
+                                    try await PlayTools.removeFromApp(app.executable)
+                                } else {
                                     try await PlayTools.installInIPA(app.executable)
-                                } catch {
-                                    Log.shared.error(error)
                                 }
+                            } catch {
+                                Log.shared.error(error)
                             }
 
-                            Task { @MainActor in
+                            await MainActor.run {
                                 AppsVM.shared.filteredApps = []
                                 AppsVM.shared.fetchApps()
+                                task = .none
+                                closeView.toggle()
                             }
-
-                            task = .none
-                            closeView.toggle()
                         }
                     } label: {
                         Text((hasPlayTools ?? true) ? "settings.removePlayTools" : "alert.install.injectPlayTools")

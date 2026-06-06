@@ -8,6 +8,29 @@
 import Foundation
 
 class Installer {
+    private static let installStateLock = NSLock()
+    private static var installInFlight = false
+
+    private static func beginInstallIfPossible() -> Bool {
+        installStateLock.lock()
+        defer { installStateLock.unlock() }
+        guard !installInFlight else { return false }
+        installInFlight = true
+        return true
+    }
+
+    private static func finishInstall() {
+        installStateLock.lock()
+        installInFlight = false
+        installStateLock.unlock()
+    }
+
+    @MainActor
+    private static func updateInstallProgress(_ step: InstallStepsNative,
+                                              _ startProgress: Double,
+                                              _ stopProgress: Double) {
+        InstallVM.shared.next(step, startProgress, stopProgress)
+    }
 
     @MainActor
     static func installPlayToolsPopup() -> Bool {
@@ -46,97 +69,112 @@ class Installer {
     }
 
     // swiftlint:disable:next function_body_length
-    @MainActor
     static func install(ipaUrl: URL, export: Bool, returnCompletion: @escaping (URL?) -> Void) {
-        // If (the option key is held or the install playtools popup settings is true) and its not an export,
-        //    then show the installer dialog
-        let installPlayTools: Bool
-        let applicationType = InstallPreferences.shared.defaultAppType
-
-        if (ModifierKeyObserver.shared.isOptionKeyPressed
-                || InstallPreferences.shared.showInstallPopup) && !export {
-            installPlayTools = installPlayToolsPopup()
-        } else {
-            installPlayTools = InstallPreferences.shared.alwaysInstallPlayTools
+        guard beginInstallIfPossible() else {
+            Task { @MainActor in
+                Log.shared.error(PlayCoverError.waitInstallation)
+                returnCompletion(nil)
+            }
+            return
         }
 
-        InstallVM.shared.next(.begin, 0.0, 0.0)
+        Task { @MainActor in
+            // If (the option key is held or the install playtools popup settings is true) and its not an export,
+            //    then show the installer dialog
+            let installPlayTools: Bool
+            let applicationType = InstallPreferences.shared.defaultAppType
 
-        Task(priority: .userInitiated) {
-            let ipa = IPA(url: ipaUrl)
+            if (ModifierKeyObserver.shared.isOptionKeyPressed
+                    || InstallPreferences.shared.showInstallPopup) && !export {
+                installPlayTools = installPlayToolsPopup()
+            } else {
+                installPlayTools = InstallPreferences.shared.alwaysInstallPlayTools
+            }
 
-            do {
-                InstallVM.shared.next(.unzip, 0.0, 0.5)
-                try ipa.allocateTempDir()
+            updateInstallProgress(.begin, 0.0, 0.0)
 
-                let app = try ipa.unzip()
-                if await ipa.checkOfficialMacOS(app: IPA.Application.base(app)) {
-                    ipa.releaseTempDir()
-                    InstallVM.shared.next(.failed, 0.95, 1.0)
-                    returnCompletion(nil)
-                    return
-                }
-                InstallVM.shared.next(.library, 0.5, 0.55)
-                try saveEntitlements(app)
-                let machos = resolveValidMachOs(app)
-                app.validMachOs = machos
+            Task.detached(priority: .userInitiated) {
+                defer { finishInstall() }
+                let ipa = IPA(url: ipaUrl)
 
-                InstallVM.shared.next(.playtools, 0.55, 0.85)
+                do {
+                    await updateInstallProgress(.unzip, 0.0, 0.5)
+                    try ipa.allocateTempDir()
 
-                for macho in machos {
-                    if try Macho.isMachoEncrypted(atURL: macho) {
-                        throw PlayCoverError.appEncrypted
+                    let app = try ipa.unzip()
+                    guard Entitlements.isBundleIDSafe(app.info.bundleIdentifier) else {
+                        throw ShellError(output: "Unsafe bundle identifier: \(app.info.bundleIdentifier)")
                     }
+                    if await ipa.checkOfficialMacOS(app: IPA.Application.base(app)) {
+                        ipa.releaseTempDir()
+                        await updateInstallProgress(.failed, 0.95, 1.0)
+                        await MainActor.run {
+                            returnCompletion(nil)
+                        }
+                        return
+                    }
+                    await updateInstallProgress(.library, 0.5, 0.55)
+                    try saveEntitlements(app)
+                    let machos = resolveValidMachOs(app)
+                    app.validMachOs = machos
+
+                    await updateInstallProgress(.playtools, 0.55, 0.85)
+
+                    for macho in machos {
+                        if try Macho.isMachoEncrypted(atURL: macho) {
+                            throw PlayCoverError.appEncrypted
+                        }
+
+                        if !export {
+                            try Macho.convertMacho(macho)
+                            try Shell.signMacho(macho)
+                        }
+                    }
+
+                    if export {
+                        try await PlayTools.injectInIPA(app.executable, payload: app.url)
+                    } else if installPlayTools {
+                        try await PlayTools.installInIPA(app.executable)
+                    }
+
+                    app.info.applicationCategoryType = applicationType
 
                     if !export {
-                        try Macho.convertMacho(macho)
-                        try Shell.signMacho(macho)
+                        // -rwxr-xr-x
+                        try app.executable.setBinaryPosixPermissions(0o755)
+                        try removeMobileProvision(app)
                     }
-                }
 
-                if export {
-                    try PlayTools.injectInIPA(app.executable, payload: app.url)
-                } else if installPlayTools {
-                    try await PlayTools.installInIPA(app.executable)
-                }
+                    let info = app.info
+                    info.assert(minimumVersion: 11.0)
+                    try info.write()
+                    await updateInstallProgress(.wrapper, 0.85, 0.95)
 
-                app.info.applicationCategoryType = applicationType
+                    var finalURL: URL
 
-                if !export {
-                    // -rwxr-xr-x
-                    try app.executable.setBinaryPosixPermissions(0o755)
-                    try removeMobileProvision(app)
-                }
+                    if export {
+                        finalURL = try ipa.packIPABack(app: app.url)
+                    } else {
+                        finalURL = try wrap(app)
+                        let installedApp = PlayApp(appUrl: finalURL)
 
-                let info = app.info
-                info.assert(minimumVersion: 11.0)
-                try info.write()
-                InstallVM.shared.next(.wrapper, 0.85, 0.95)
+                        installedApp.sign()
+                    }
 
-                var finalURL: URL
+                    ipa.releaseTempDir()
+                    try ipa.removeQuarantine(finalURL)
+                    await updateInstallProgress(.finish, 0.95, 1.0)
+                    await MainActor.run {
+                        returnCompletion(finalURL)
+                    }
+                } catch {
+                    Log.shared.error(returnErrorString(error: error))
+                    ipa.releaseTempDir()
 
-                if export {
-                    finalURL = try ipa.packIPABack(app: app.url)
-                } else {
-                    finalURL = try wrap(app)
-                    let installedApp = PlayApp(appUrl: finalURL)
-
-                    installedApp.sign()
-                }
-
-                ipa.releaseTempDir()
-                try ipa.removeQuarantine(finalURL)
-                InstallVM.shared.next(.finish, 0.95, 1.0)
-                await MainActor.run {
-                    returnCompletion(finalURL)
-                }
-            } catch {
-                Log.shared.error(returnErrorString(error: error))
-                ipa.releaseTempDir()
-
-                InstallVM.shared.next(.failed, 0.95, 1.0)
-                await MainActor.run {
-                    returnCompletion(nil)
+                    await updateInstallProgress(.failed, 0.95, 1.0)
+                    await MainActor.run {
+                        returnCompletion(nil)
+                    }
                 }
             }
         }
@@ -234,13 +272,28 @@ class Installer {
             .appendingPathComponent("Info")
             .appendingPathExtension("plist"))
         let location = AppsVM.appDirectory
-            .appendingEscapedPathComponent(info.bundleIdentifier)
+            .appendingSafeFileNameComponent(info.bundleIdentifier)
             .appendingPathExtension("app")
+        let backupLocation = location.deletingLastPathComponent()
+            .appendingEscapedPathComponent(".\(location.lastPathComponent).backup.\(UUID().uuidString)")
+
+        var createdBackup = false
         if FileManager.default.fileExists(atPath: location.path) {
-            try FileManager.default.removeItem(at: location)
+            try FileManager.default.moveItem(at: location, to: backupLocation)
+            createdBackup = true
         }
 
-        try FileManager.default.moveItem(at: baseApp.url, to: location)
+        do {
+            try FileManager.default.moveItem(at: baseApp.url, to: location)
+            if createdBackup {
+                FileManager.default.delete(at: backupLocation)
+            }
+        } catch {
+            if createdBackup && !FileManager.default.fileExists(atPath: location.path) {
+                try? FileManager.default.moveItem(at: backupLocation, to: location)
+            }
+            throw error
+        }
         return location
     }
 }

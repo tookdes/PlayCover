@@ -19,7 +19,7 @@ public class BaseApp {
 
     public var entitlements: URL {
         Entitlements.playCoverEntitlementsDir
-            .appendingPathComponent(info.bundleIdentifier)
+            .appendingSafeFileNameComponent(info.bundleIdentifier)
             .appendingPathExtension("plist")
     }
 

@@ -120,6 +120,25 @@ extension URL {
         return self.appendingPathComponent(newPathComponent)
     }
 
+    func appendingSafeFileNameComponent(_ pathComponent: String) -> URL {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
+        var newPathComponent = ""
+        for scalar in pathComponent.unicodeScalars {
+            if allowed.contains(scalar) {
+                newPathComponent.unicodeScalars.append(scalar)
+            } else {
+                newPathComponent.append("_")
+            }
+        }
+        while newPathComponent.contains("..") {
+            newPathComponent = newPathComponent.replacingOccurrences(of: "..", with: ".")
+        }
+        if newPathComponent.isEmpty || newPathComponent == "." {
+            newPathComponent = "_"
+        }
+        return self.appendingPathComponent(newPathComponent)
+    }
+
     func setBinaryPosixPermissions(_ permissions: Int) throws {
         try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: path)
     }

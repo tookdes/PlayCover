@@ -59,8 +59,12 @@ struct KeyCover {
                 KeyCoverObservable.shared.isKeyCoverUnlockingPromptShown = true
             }
             await task.value
-            while KeyCoverObservable.shared.isKeyCoverUnlockingPromptShown {
-                sleep(1)
+            while true {
+                let promptShown = await MainActor.run {
+                    KeyCoverObservable.shared.isKeyCoverUnlockingPromptShown
+                }
+                if !promptShown { break }
+                try await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
         if keychain.chainEncryptionStatus {
@@ -112,12 +116,12 @@ struct KeyCoverKey {
 
     var decryptedKeyDB: URL {
         KeyCover.playChainPath
-            .appendingPathComponent(appBundleID)
+            .appendingSafeFileNameComponent(appBundleID)
             .appendingPathExtension("db")
     }
     var encryptedKeyDB: URL {
         KeyCover.playChainPath
-            .appendingPathComponent(appBundleID)
+            .appendingSafeFileNameComponent(appBundleID)
             .appendingPathExtension(KeyCoverKey.encryptedKeyExtension)
     }
 
@@ -140,7 +144,7 @@ struct KeyCoverKey {
             let pipe = Pipe()
             task.standardInput = pipe
             try task.run()
-            if let keyData = plainTextKey.data(using: .utf8) {
+            if let keyData = (plainTextKey + "\n").data(using: .utf8) {
                 pipe.fileHandleForWriting.write(keyData)
             }
             try? pipe.fileHandleForWriting.close()
@@ -171,7 +175,7 @@ struct KeyCoverKey {
             let pipe = Pipe()
             task.standardInput = pipe
             try task.run()
-            if let keyData = plainTextKey.data(using: .utf8) {
+            if let keyData = (plainTextKey + "\n").data(using: .utf8) {
                 pipe.fileHandleForWriting.write(keyData)
             }
             try? pipe.fileHandleForWriting.close()

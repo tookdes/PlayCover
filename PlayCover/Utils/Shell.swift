@@ -49,8 +49,6 @@ class Shell: ObservableObject {
             return false
         }
 
-        var result = true
-
         // Show the output as it is produced
         sudoOut.fileHandleForReading.readabilityHandler = { fileHandle in
             let data = fileHandle.availableData
@@ -58,9 +56,6 @@ class Shell: ObservableObject {
 
             if let out = String(bytes: data, encoding: .utf8) {
                 Log.shared.log(out)
-                if out.contains("password") {
-                    result = false
-                }
             }
         }
         if let data = passwordWithNewline.data(using: .utf8) {
@@ -74,7 +69,8 @@ class Shell: ObservableObject {
 
         // Make sure we don't disappear while output is still being produced.
         sudo.waitUntilExit()
-        return result
+        sudoOut.fileHandleForReading.readabilityHandler = nil
+        return sudo.terminationStatus == 0
     }
 
     static func signMacho(_ binary: URL) throws {
@@ -100,14 +96,13 @@ class Shell: ObservableObject {
         Task(priority: .utility) {
             do {
                 if withTerminalWindow {
-                    let safePath = url.path.replacingOccurrences(
-                        of: "[^a-zA-Z0-9/._-]", with: "", options: .regularExpression)
-                    let command = "/usr/bin/lldb -o run \(safePath) -o exit"
+                    let command = "/usr/bin/lldb -o run \(shellQuoted(url.path)) -o exit"
+                    let appleScriptCommand = appleScriptQuoted(command)
                     let osascript = """
                         tell app "Terminal"
                             reopen
                             activate
-                            do script "\(command)"
+                            do script "\(appleScriptCommand)"
                         end tell
                     """
                     let appleScript = NSAppleScript(source: osascript)
@@ -128,6 +123,18 @@ class Shell: ObservableObject {
                 Log.shared.error(error)
             }
         }
+    }
+
+    private static func shellQuoted(_ string: String) -> String {
+        "'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func appleScriptQuoted(_ string: String) -> String {
+        string
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
     }
 }
 

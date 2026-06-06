@@ -28,6 +28,13 @@ class Uninstaller {
         Uninstaller.libraryUrl.appendingPathComponent("HTTPStorages"),
         Uninstaller.libraryUrl.appendingPathComponent("Saved Application State")
     ]
+    private static let bundleCacheSuffixes = [
+        ".plist",
+        ".db",
+        ".keyCover",
+        ".savedState",
+        ".binarycookies"
+    ]
 
     private static func createButtonView(_ yaxis: CGFloat, _ text: String, _ varname: String) -> CheckBoxHelper {
         let button = NSButton(checkboxWithTitle: text, target: self, action: nil)
@@ -132,7 +139,7 @@ class Uninstaller {
         }
 
         if UninstallPreferences.shared.removePlayChain {
-            let url = KeyCover.playChainPath.appendingPathComponent(app.info.bundleIdentifier)
+            let url = KeyCover.playChainPath.appendingSafeFileNameComponent(app.info.bundleIdentifier)
             FileManager.default.delete(at: url)
 
             // KeyCover encrypted chain
@@ -180,7 +187,7 @@ class Uninstaller {
         do {
             for cache in cacheURLs {
                 cache.enumerateContents(options: [.skipsSubdirectoryDescendants]) { file, _ in
-                    if file.path.contains(bundleId) {
+                    if cacheItem(file, belongsTo: bundleId) {
                         try FileManager.default.trashItem(at: file, resultingItemURL: nil)
                     }
                 }
@@ -200,8 +207,7 @@ class Uninstaller {
 
             for url in fullPruneURLs {
                 url.enumerateContents(options: [.skipsSubdirectoryDescendants]) { file, _ in
-                    let bundleId = file.deletingPathExtension().lastPathComponent
-                    if danglingItems.contains(bundleId) {
+                    if let bundleId = danglingItems.first(where: { cacheItem(file, belongsTo: $0) }) {
                         try FileManager.default.trashItem(at: file, resultingItemURL: nil)
                         prunedIds.append(bundleId)
                     }
@@ -213,5 +219,13 @@ class Uninstaller {
         } catch {
             Log.shared.error(error)
         }
+    }
+
+    private static func cacheItem(_ file: URL, belongsTo bundleId: String) -> Bool {
+        let itemName = file.lastPathComponent
+        if itemName == bundleId {
+            return true
+        }
+        return bundleCacheSuffixes.contains { itemName == bundleId + $0 }
     }
 }
